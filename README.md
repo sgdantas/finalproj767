@@ -58,4 +58,4 @@ The main parameters are:
 - graph.py	: code used to generate plots
 - utils.py* : utility functions, 
 
-* original or adapted from https://github.com/MichelDeudon/encode-attend-navigate
+\* original or adapted from https://github.com/MichelDeudon/encode-attend-navigate
