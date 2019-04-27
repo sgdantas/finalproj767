@@ -8,14 +8,30 @@ from tqdm import tqdm
 import os
 import matplotlib.pyplot as plt
 
-#from utils import embed_seq, encode_seq, full_glimpse, pointer
+import random
 from utils import embed_seq, encode_seq, full_glimpse, pointer, pointer_critic
 from data_generator import DataGenerator
 
 from copy import copy
 import graph 
-n_td = 40 
+
+###############################################################
+#PARAMETERS CONTROLLING THE FUNCTONS IMPLEMENTED IN THIS CODE
+###############################################################
 init_baseline = 0.0
+
+n_td = 40 #Variable controlling the n-step return
+
+use_elig_trace = True #Set to True if want to use elig_trace, False otherwise
+lamda_value = 0.6
+use_xp_replay = True #Set to True if want to use experience replay, False otherwise
+n_replay = 10
+
+n_reps = 3 # Number of times the training will be performed in order to generate the plots with av and std values
+
+
+
+
 
 
 #DATA GENERATOR
@@ -59,7 +75,7 @@ net_arg.add_argument('--num_neurons_critic', type=int, default=256, help='critic
 
 # Train / test parameters
 train_arg = add_argument_group('Training')
-train_arg.add_argument('--nb_steps', type=int, default=20, help='nb steps')
+train_arg.add_argument('--nb_steps', type=int, default=1000, help='nb steps')
 train_arg.add_argument('--init_B', type=float, default=init_baseline, help='critic init baseline')
 train_arg.add_argument('--lr_start', type=float, default=0.001, help='actor learning rate')
 train_arg.add_argument('--lr_decay_step', type=int, default=5000, help='lr1 decay step')
@@ -137,12 +153,13 @@ class Actor(object):
         untill the end of the episode 
         """
         flag = False
+        idx_ = []
         for i in range (self.max_length):
             print()
             print('Current on step ', i)
             with tf.variable_scope("actor"+str(i)):
                 # Call enconde decode TD
-                idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous = self.encode_decode_TD( n_td,idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous )            
+                idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous, idx_ = self.encode_decode_TD( n_td,idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous, idx_ )            
             
             with tf.variable_scope("critic"+str(i)): self.build_critic()
             with tf.variable_scope("environment"+str(i)): self.build_reward()            
@@ -159,7 +176,33 @@ class Actor(object):
     ############################################################################################################################################################################################## 
     ##############################################################################################################################################################################################
     ##############################################################################################################################################################################################
-    def encode_decode_TD(self, n_step, idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous ):
+    def _update_e_trace(self, trace, gradients, lamda_value, index, flag_grad2 = True ):
+        """
+        update the eligibility trace vector
+        """
+        trace_output = []
+        
+        if (flag_grad2): #If related to the weights of the Actor
+            grad_init_index1 = (index - 1) * len(trace)
+            grad_init_index2 = (index) * len(trace)           
+            
+            print("len trace = ",len(trace))
+            print("len gradients = ", len(gradients))
+            step_size = len(trace)
+
+            for trace_index in range(len(trace)):                
+                trace_output.append( (lamda_value*trace[trace_index][0] + gradients[trace_index][0], gradients[trace_index][1]) )
+
+            for trace_index in range(len(gradients) - step_size):
+                trace_output.append( (gradients[ step_size + trace_index][0], gradients[step_size + trace_index][1] ))
+                
+        else:   #If related to the weights of the Critic
+            for trace_index in range(len(trace)):
+                
+                trace_output.append( (lamda_value*trace[trace_index][0]  + gradients[trace_index][0], gradients[trace_index][1]) )
+        return trace_output
+
+    def encode_decode_TD(self, n_step, idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous, idx_ ):
         """
         Modified to accomodate tours 
         idx_list_previous is a list with partial choices made by the actor
@@ -190,10 +233,12 @@ class Actor(object):
         query1 = copy( query1_previous)
         query2 = copy( query2_previous)
         query3 = copy( query3_previous)
+        idx_copy = copy(idx_)
             
         W_1 =tf.get_variable("W_1",[n_hidden, self.query_dim],initializer=self.initializer) # update trajectory (state)
         W_2 =tf.get_variable("W_2",[n_hidden, self.query_dim],initializer=self.initializer)
         W_3 =tf.get_variable("W_3",[n_hidden, self.query_dim],initializer=self.initializer)
+        
         
         """
         # sample from POINTER from the perspective of the Actor
@@ -216,6 +261,7 @@ class Actor(object):
             mask = mask + tf.one_hot(idx, self.max_length) # mask
             mask_previous = mask_previous + tf.one_hot(idx, self.max_length)
 
+            idx_copy =  tf.stack([tf.range(self.batch_size,dtype=tf.int32), idx],1) # idx with batch   
             idx_ = tf.stack([tf.range(self.batch_size,dtype=tf.int32), idx],1) # idx with batch   
             query3 = query2
             query2 = query1
@@ -242,21 +288,20 @@ class Actor(object):
             entropies.append(prob.entropy()) # entropies
             mask = mask + tf.one_hot(idx, self.max_length) # mask
 
-            idx_ = tf.stack([tf.range(self.batch_size,dtype=tf.int32), idx],1) # idx with batch   
+            idx_copy = tf.stack([tf.range(self.batch_size,dtype=tf.int32), idx],1) # idx with batch   
+            #idx_ = tf.stack([tf.range(self.batch_size,dtype=tf.int32), idx],1) # idx with batch   
             query3 = query2
             query2 = query1
-            query1 = tf.gather_nd(actor_encoding, idx_) # update trajectory (state)
-            
-                       
-                      
+            query1 = tf.gather_nd(actor_encoding, idx_copy) # update trajectory (state)
+                                                        
         idx_list.append(idx_list[0]) # return to start
-        self.tour = tf.stack(idx_list, axis=1) # permutations
+        self.tour =tf.stack(idx_list, axis=1) # permutations
         self.log_prob = tf.add_n(log_probs) # corresponding log-probability for backprop
         self.entropies = tf.add_n(entropies)
         tf.summary.scalar('log_prob_mean', tf.reduce_mean(self.log_prob))
         tf.summary.scalar('entropies_mean', tf.reduce_mean(self.entropies))
         
-        return idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous    #returns variables necessary for the next loop
+        return idx_list_previous, log_probs_previous, entropies_previous, mask_previous, query1_previous, query2_previous, query3_previous, idx_    #returns variables necessary for the next loop
     ############################################################################################################################################################################################## 
     ##############################################################################################################################################################################################
     ##############################################################################################################################################################################################              
@@ -302,7 +347,23 @@ class Actor(object):
                 self.loss = tf.reduce_mean(tf.stop_gradient(self.reward-self.predictions)*self.log_prob, axis=0) # loss actor
                 gvs1 = opt1.compute_gradients(self.loss) # gradients
                 capped_gvs1 = [(tf.clip_by_norm(grad, 1.), var) for grad, var in gvs1 if grad is not None] # L2 clip
-                self.trn_op1 = opt1.apply_gradients(grads_and_vars=capped_gvs1, global_step=self.global_step) # minimize op actor
+                # IF ELIG TRACE
+                if(use_elig_trace):
+                    """
+                    If first iteration create the elig trace vector
+                    """
+                    if(i==0): 
+                        self.elig_trace1 = [(0*grad,var) for grad, var in capped_gvs1 if grad is not None ]                    
+                        self.trn_op1 = opt1.apply_gradients(grads_and_vars=capped_gvs1, global_step=self.global_step) # minimize op actor                   
+                    #"""
+                    #If needed to update the elig trace vector
+                    #"""
+                    else:
+                        self.elig_trace1 = self._update_e_trace(self.elig_trace1, capped_gvs1, lamda_value, i )                 
+                        self.trn_op1 = opt1.apply_gradients(grads_and_vars=self.elig_trace1, global_step=self.global_step) # minimize op actor               
+                # NO ELIG TRACE
+                else:
+                    self.trn_op1 = opt1.apply_gradients(grads_and_vars=capped_gvs1, global_step=self.global_step) # minimize op actor
             
             with tf.name_scope('state_value'+str(i)):
                 lr2 = tf.train.natural_exp_decay(learning_rate=self.lr_start, global_step=self.global_step2, decay_steps=self.lr_decay_step, decay_rate=self.lr_decay_rate, staircase=False, name="learning_rate2") # learning rate critic
@@ -310,7 +371,19 @@ class Actor(object):
                 loss2 = tf.losses.mean_squared_error(self.reward, self.predictions) # loss critic
                 gvs2 = opt2.compute_gradients(loss2) # gradients
                 capped_gvs2 = [(tf.clip_by_norm(grad, 1.), var) for grad, var in gvs2 if grad is not None] # L2 clip
-                self.trn_op2 = opt2.apply_gradients(grads_and_vars=capped_gvs2, global_step=self.global_step2) # minimize op critic
+                if(use_elig_trace):
+                    if(i==0):
+                        """
+                        If first iteration create the elig trace vector
+                        """
+                        self.elig_trace2 = [(0*grad,var) for grad, var in capped_gvs2 if grad is not None ]
+                        self.trn_op2 = opt2.apply_gradients(grads_and_vars=capped_gvs2, global_step=self.global_step) # minimize op actor
+                    else:
+                        self.elig_trace2 = self._update_e_trace(self.elig_trace2, capped_gvs2, lamda_value, i, flag_grad2 = False )
+                        self.trn_op2 = opt2.apply_gradients(grads_and_vars=self.elig_trace2, global_step=self.global_step) # minimize op actor
+
+                else:
+                    self.trn_op2 = opt2.apply_gradients(grads_and_vars=capped_gvs2, global_step=self.global_step2) # minimize op critic
 
 
 #IN [6]
@@ -332,7 +405,7 @@ with tf.Session() as sess: # start session
         #print("Variable: ", k, "Shape: ", v.shape) # print all variables
         pass
 
-n_reps = 3
+
 reward_per_step = np.zeros(shape = (config.nb_steps,n_reps)) #################################################################
 baseline_per_step = np.zeros(config.nb_steps) #################################################################
 iterations = np.arange(config.nb_steps) #################################################################
@@ -348,19 +421,34 @@ for rep in range(n_reps):
     with tf.Session() as sess: # start session
         sess.run(tf.global_variables_initializer()) # run initialize op
         writer = tf.summary.FileWriter('summary/'+dir_, sess.graph) # summary writer
-         
+        buffer_list = []  
         for i in tqdm(range(config.nb_steps)): # Forward pass & train step
             input_batch2 = dataset.train_batch(actor.batch_size, actor.max_length, actor.dimension)
+
+            buffer_list.extend(input_batch2) # store samples in this list
+
             feed2 = {actor.input_: input_batch2} # get feed dict
             reward, predictions, summary, _, _ = sess.run([actor.reward, actor.predictions, actor.merged, actor.trn_op1, actor.trn_op2], feed_dict=feed2)
 
             reward_per_step[i][rep] = np.mean(reward) #################################################################
-            baseline_per_step[i] += np.mean(predictions)/n_reps
-                 
+            baseline_per_step[i] += np.mean(predictions)/n_reps                                   
+            
             if i % 50 == 0: 
                 print('reward',np.mean(reward))
                 print('predictions',np.mean(predictions))
-                writer.add_summary(summary,i)
+                writer.add_summary(summary,i)          
+            """
+            Very simple implementation of Experience Replay
+            where, at every n_replay iterations, 
+            n_replay random replays are sampled from buffer_list
+            """
+            if(use_xp_replay):
+                if(i>= n_replay):
+                    for j in range(n_replay):
+                        input_batch_replay = random.sample(buffer_list, k = actor.batch_size)
+                        feed_replay = {actor.input_: input_batch_replay} # get feed dict
+                        reward, predictions, summary, _, _ = sess.run([actor.reward, actor.predictions, actor.merged, actor.trn_op1, actor.trn_op2], feed_dict=feed2)
+                    n_replay += n_replay
         
         save_path = "save/"+dir_
         if not os.path.exists(save_path):
