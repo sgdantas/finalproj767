@@ -54,7 +54,7 @@ The main parameters are:
 - Neural_Reinforce-NoCritic.ipynb	: Model without baseline
 - Neural_Reinforce.ipynb* : base model
 - PlotMemory.ipynb	: code used to plot the memory learning curves
-- n_step_return.py	: n step TD, eligibility traces implementation
+- n_step_return.py	: n step TD, eligibility traces implementation - the main parameters controlling the related file are in the top part of the code.
 - data_generator.py*	: generates the trajectory
 - graph.py	: code used to generate plots
 - utils.py* : utility functions, 
