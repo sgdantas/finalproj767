@@ -64,6 +64,19 @@ def feedforward(inputs, num_units=[2048, 512], is_training=True):
     return outputs
 
 
+"""
+Get scores from the pointer using only Wref
+"""
+def pointer_critic(encoded_ref, mask, W_ref, v, C=10., temperature=1.0):
+    #encoded_query = tf.expand_dims(tf.matmul(query, W_q), 1) # [Batch size, 1, n_hidden]
+    #scores = tf.reduce_sum(v * tf.tanh(encoded_ref + encoded_query), [-1]) # [Batch size, seq_length]
+    scores = tf.reduce_sum(v * tf.tanh(encoded_ref), [-1]) # [Batch size, seq_length]
+    scores = C*tf.tanh(scores/temperature) # control entropy
+    masked_scores =  tf.clip_by_value(scores -100000000.*mask, -100000000., 100000000.) # [Batch size, seq_length]
+    return masked_scores
+
+
+
 # Encode input sequence [batch_size, seq_length, n_hidden] -> [batch_size, seq_length, n_hidden]
 def encode_seq(input_seq, input_dim, num_stacks, num_heads, num_neurons, is_training, dropout_rate=0.):
     with tf.variable_scope("stack"):
