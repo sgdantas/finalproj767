@@ -43,11 +43,19 @@ The main parameters are:
 - '--C' : clipping parameter
 
 
-- To train a model from scratch (data is generated on the fly), run blocks 1.DataGenerator, 2.Config, 3.Model and 4.Train with the Jupyter Notebook (Neural_Reinforce.ipynb). You can change parameters in the Config block. Default parameters should replicate results reported in our paper (2D TSP50).
+- To train a model just run blocks 1.DataGenerator, 2.Config, 3.Model and 4.Train with the Jupyter Notebook (for files .ipynb). If the file is .py, just execute the code
 
-- If training is successful, the model will be saved in a "save" folder (filename depends on config) and training statistics will be reported in a "summary" folder. To visualize training on tensorboard, run:
-```
-> tensorboard --logdir=summary
-```
+### Files Specification
 
-- To test a trained model, run block 5.Test with the Jupyter Notebook (Neural_Reinforce.ipynb).
+
+- K1_Neural_Reinforce.ipynb	: Model with K = 1
+- K5_Neural_Reinforce.ipynb	: Model with K = 5
+- Neural_Reinforce-NoCritic.ipynb	: Model without baseline
+- Neural_Reinforce.ipynb* : base model
+- PlotMemory.ipynb	: code used to plot the memory learning curves
+- TD_step.py	: TD implementation
+- data_generator.py*	: generates the trajectory
+- graph.py	: code used to generate plots
+- utils.py* : utility functions, 
+
+\* original or adapted from https://github.com/MichelDeudon/encode-attend-navigate
