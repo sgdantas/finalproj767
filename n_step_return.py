@@ -25,6 +25,7 @@ n_td = 40 #Variable controlling the n-step return
 use_elig_trace = True #Set to True if want to use elig_trace, False otherwise
 lamda_value = 0.6
 use_xp_replay = True #Set to True if want to use experience replay, False otherwise
+n_step_replay = 50   #Replay at every n_step_replay
 n_replay = 10
 
 n_reps = 3 # Number of times the training will be performed in order to generate the plots with av and std values
@@ -35,7 +36,6 @@ n_reps = 3 # Number of times the training will be performed in order to generate
 
 
 #DATA GENERATOR
-#IN [2]
 dataset = DataGenerator() # Create Data Generator
 
 input_batch = dataset.test_batch(batch_size=128, max_length=50, dimension=2, seed=123) # Generate some data
@@ -43,7 +43,6 @@ dataset.visualize_2D_trip(input_batch[0]) # 2D plot for coord batch
 
 
 #CONFIG
-#IN [3]
 import argparse
 
 parser = argparse.ArgumentParser(description='Configuration file')
@@ -89,16 +88,13 @@ def get_config():
   return config, unparsed
 
 
-#IN [4]
 config, _ = get_config()
 dir_ = str(config.dimension)+'D_'+'TSP'+str(config.max_length) +'_b'+str(config.batch_size)+'_e'+str(config.input_embed)+'_n'+str(config.num_neurons)+'_s'+str(config.num_stacks)+'_h'+str(config.num_heads)+ '_q'+str(config.query_dim) +'_u'+str(config.num_units)+'_c'+str(config.num_neurons_critic)+ '_lr'+str(config.lr_start)+'_d'+str(config.lr_decay_step)+'_'+str(config.lr_decay_rate)+ '_T'+str(config.temperature)+ '_steps'+str(config.nb_steps)+'_i'+str(config.init_B) 
 print(dir_)
 
 
 #MODEL
-       
-   
-        
+               
 class Actor(object):
     
     def __init__(self):
@@ -385,18 +381,13 @@ class Actor(object):
                 else:
                     self.trn_op2 = opt2.apply_gradients(grads_and_vars=capped_gvs2, global_step=self.global_step2) # minimize op critic
 
-
-#IN [6]
 tf.reset_default_graph()
 actor = Actor() # Build graph
 
-
-#IN [7]
 variables_to_save = [v for v in tf.global_variables() if 'Adam' not in v.name] # Save & restore all the variables.
 saver = tf.train.Saver(var_list=variables_to_save, keep_checkpoint_every_n_hours=1.0)   
 
 
-#IN [8]
 with tf.Session() as sess: # start session
     sess.run(tf.global_variables_initializer()) # Run initialize op
     variables_names = [v.name for v in tf.trainable_variables() if 'Adam' not in v.name]
@@ -443,12 +434,12 @@ for rep in range(n_reps):
             n_replay random replays are sampled from buffer_list
             """
             if(use_xp_replay):
-                if(i>= n_replay):
+                if(i>= n_step_replay):
                     for j in range(n_replay):
                         input_batch_replay = random.sample(buffer_list, k = actor.batch_size)
                         feed_replay = {actor.input_: input_batch_replay} # get feed dict
                         reward, predictions, summary, _, _ = sess.run([actor.reward, actor.predictions, actor.merged, actor.trn_op1, actor.trn_op2], feed_dict=feed2)
-                    n_replay += n_replay
+                    n_step_replay += n_step_replay
         
         save_path = "save/"+dir_
         if not os.path.exists(save_path):
@@ -481,7 +472,6 @@ config.temperature = 1.2 ##### #####
 
 tf.reset_default_graph()
 actor = Actor() # Build graph
-r1,r2 = test_1()
 
 ##########################
 config.is_training = True
