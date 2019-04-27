@@ -1,6 +1,7 @@
 # finalproj767
 
 ## Final project for COMP-767 at McGill University
+## Group: Joao Pedro de Carvalho (McGill ID 260642102), Peyman Kafaei (McGill ID 260780776), Stefano Giacomazzi Dantas(McGill ID 260642029)
 ## Goal
 
 ### Study the learning behaviour of <br/> [Learning Heuristics for the TSP by Policy Gradient](https://link.springer.com/chapter/10.1007%2F978-3-319-93031-2_12) in terms of episodes and hyperparameter values.
@@ -53,7 +54,7 @@ The main parameters are:
 - Neural_Reinforce-NoCritic.ipynb	: Model without baseline
 - Neural_Reinforce.ipynb* : base model
 - PlotMemory.ipynb	: code used to plot the memory learning curves
-- TD_step.py	: TD implementation
+- n_step_return.py	: n step TD, eligibility traces implementation
 - data_generator.py*	: generates the trajectory
 - graph.py	: code used to generate plots
 - utils.py* : utility functions, 
