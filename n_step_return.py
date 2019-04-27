@@ -473,13 +473,6 @@ config.temperature = 1.2 ##### #####
 tf.reset_default_graph()
 actor = Actor() # Build graph
 
-##########################
-config.is_training = True
-#config.batch_size = 256 ##### #####
-config.max_length = 50 ##### #####
-config.temperature = 1.0 ##### #####
-
-
 variables_to_save = [v for v in tf.global_variables() if 'Adam' not in v.name] # Save & restore all the variables.
 saver = tf.train.Saver(var_list=variables_to_save, keep_checkpoint_every_n_hours=1.0)   
 
